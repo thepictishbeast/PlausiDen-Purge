@@ -5,5 +5,6 @@
 pub mod algorithms;
 pub mod destroyer;
 pub mod error;
+pub mod file_type;
 pub mod shredder;
 pub mod report;
