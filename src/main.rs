@@ -8,6 +8,7 @@
 mod algorithms;
 mod analyzer;
 mod archiver;
+mod browser_cleaner;
 mod config;
 mod destroyer;
 mod error;
@@ -62,6 +63,21 @@ enum Commands {
     Usage,
     /// Run as a daemon monitoring storage
     Daemon,
+    /// Clean browser caches, cookies, history, and system temp files
+    BrowserClean {
+        /// Only show what would be cleaned (no deletions)
+        #[arg(long)]
+        dry_run: bool,
+        /// Categories to clean (comma-separated). Default: cache.
+        /// Options: cache,cookies,history,sessions,formdata,passwords,
+        /// downloads,thumbnails,serviceworkers,indexeddb,localstorage,
+        /// websql,logs,crashreports,extensions,systemtemp
+        #[arg(long, default_value = "cache")]
+        categories: String,
+        /// Erasure algorithm: zerofill, nist, dod, gutmann, crypto
+        #[arg(long, default_value = "nist")]
+        algorithm: String,
+    },
 }
 
 fn main() {
@@ -110,6 +126,81 @@ fn main() {
         Commands::Daemon => {
             tracing::info!("Starting Purge daemon");
             todo!("Daemon mode")
+        }
+        Commands::BrowserClean { dry_run, categories, algorithm } => {
+            tracing::info!("Browser clean (dry_run={dry_run})");
+
+            let cats = parse_categories(&categories);
+            if cats.is_empty() {
+                eprintln!("No valid categories specified. Use --categories cache,cookies,...");
+                std::process::exit(1);
+            }
+
+            let algo = match algorithm.as_str() {
+                "zerofill" | "zero" => algorithms::ErasureAlgorithm::ZeroFill,
+                "nist" => algorithms::ErasureAlgorithm::Nist80088,
+                "dod" => algorithms::ErasureAlgorithm::Dod522022M,
+                "gutmann" => algorithms::ErasureAlgorithm::Gutmann35,
+                "crypto" => algorithms::ErasureAlgorithm::CryptographicErasure,
+                other => {
+                    eprintln!("Unknown algorithm: {other}");
+                    std::process::exit(1);
+                }
+            };
+
+            let mut cleaner = browser_cleaner::BrowserCleaner::new();
+            cleaner.discover();
+
+            if dry_run {
+                let report = cleaner.dry_run();
+                println!("DRY RUN — nothing will be deleted\n");
+                print_browser_report(&report);
+            } else {
+                match cleaner.clean(&cats, algo) {
+                    Ok(report) => {
+                        println!("Clean complete:\n");
+                        print_browser_report(&report);
+                    }
+                    Err(e) => eprintln!("Clean failed: {e}"),
+                }
+            }
+        }
+    }
+}
+
+fn parse_categories(input: &str) -> Vec<browser_cleaner::CleanCategory> {
+    use browser_cleaner::CleanCategory;
+    input
+        .split(',')
+        .filter_map(|s| match s.trim().to_lowercase().as_str() {
+            "cache" => Some(CleanCategory::Cache),
+            "cookies" => Some(CleanCategory::Cookies),
+            "history" => Some(CleanCategory::History),
+            "sessions" => Some(CleanCategory::Sessions),
+            "formdata" => Some(CleanCategory::FormData),
+            "passwords" => Some(CleanCategory::Passwords),
+            "downloads" => Some(CleanCategory::Downloads),
+            "thumbnails" => Some(CleanCategory::Thumbnails),
+            "serviceworkers" => Some(CleanCategory::ServiceWorkers),
+            "indexeddb" => Some(CleanCategory::IndexedDB),
+            "localstorage" => Some(CleanCategory::LocalStorage),
+            "websql" => Some(CleanCategory::WebSQL),
+            "logs" => Some(CleanCategory::Logs),
+            "crashreports" => Some(CleanCategory::CrashReports),
+            "extensions" => Some(CleanCategory::Extensions),
+            "systemtemp" => Some(CleanCategory::SystemTemp),
+            _ => None,
+        })
+        .collect()
+}
+
+fn print_browser_report(report: &browser_cleaner::CleanReport) {
+    println!("  Targets found: {}", report.total_targets);
+    println!("  Total size:    {}", bytesize::ByteSize(report.total_bytes));
+    if !report.by_category.is_empty() {
+        println!("\n  By category:");
+        for (cat, bytes) in &report.by_category {
+            println!("    {cat:<20} {}", bytesize::ByteSize(*bytes));
         }
     }
 }
