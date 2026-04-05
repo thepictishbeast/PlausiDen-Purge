@@ -13,6 +13,7 @@ mod config;
 mod destroyer;
 mod error;
 mod scanner;
+mod system_cleaner;
 mod tracker;
 
 use clap::{Parser, Subcommand};
@@ -73,6 +74,20 @@ enum Commands {
         /// downloads,thumbnails,serviceworkers,indexeddb,localstorage,
         /// websql,logs,crashreports,extensions,systemtemp
         #[arg(long, default_value = "cache")]
+        categories: String,
+        /// Erasure algorithm: zerofill, nist, dod, gutmann, crypto
+        #[arg(long, default_value = "nist")]
+        algorithm: String,
+    },
+    /// System-wide cleanup: package caches, logs, old kernels, temp files, and more
+    SystemClean {
+        /// Only show what would be cleaned (no deletions)
+        #[arg(long)]
+        dry_run: bool,
+        /// Categories to clean (comma-separated). Default: all.
+        /// Options: all,package,logs,kernels,thumbnails,shaders,
+        /// lang,docker,snap,temp,cores,recent
+        #[arg(long, default_value = "all")]
         categories: String,
         /// Erasure algorithm: zerofill, nist, dod, gutmann, crypto
         #[arg(long, default_value = "nist")]
@@ -165,6 +180,44 @@ fn main() {
                 }
             }
         }
+        Commands::SystemClean { dry_run, categories, algorithm } => {
+            tracing::info!("System clean (dry_run={dry_run})");
+
+            let cats = system_cleaner::parse_system_categories(&categories);
+            if cats.is_empty() {
+                eprintln!("No valid categories specified. Use --categories all or --categories thumbnails,logs,...");
+                std::process::exit(1);
+            }
+
+            let algo = match algorithm.as_str() {
+                "zerofill" | "zero" => algorithms::ErasureAlgorithm::ZeroFill,
+                "nist" => algorithms::ErasureAlgorithm::Nist80088,
+                "dod" => algorithms::ErasureAlgorithm::Dod522022M,
+                "gutmann" => algorithms::ErasureAlgorithm::Gutmann35,
+                "crypto" => algorithms::ErasureAlgorithm::CryptographicErasure,
+                other => {
+                    eprintln!("Unknown algorithm: {other}");
+                    std::process::exit(1);
+                }
+            };
+
+            let mut cleaner = system_cleaner::SystemCleaner::new();
+            cleaner.discover();
+
+            if dry_run {
+                let report = cleaner.dry_run();
+                println!("DRY RUN — nothing will be deleted\n");
+                print_system_report(&report);
+            } else {
+                match cleaner.clean(&cats, algo) {
+                    Ok(report) => {
+                        println!("System clean complete:\n");
+                        print_system_report(&report);
+                    }
+                    Err(e) => eprintln!("System clean failed: {e}"),
+                }
+            }
+        }
     }
 }
 
@@ -201,6 +254,30 @@ fn print_browser_report(report: &browser_cleaner::CleanReport) {
         println!("\n  By category:");
         for (cat, bytes) in &report.by_category {
             println!("    {cat:<20} {}", bytesize::ByteSize(*bytes));
+        }
+    }
+}
+
+fn print_system_report(report: &system_cleaner::SystemCleanReport) {
+    println!("  Targets found: {}", report.total_targets);
+    println!("  Total size:    {}", bytesize::ByteSize(report.total_bytes));
+    if !report.by_category.is_empty() {
+        println!("\n  By category:");
+        for (cat, bytes) in &report.by_category {
+            println!("    {cat:<20} {}", bytesize::ByteSize(*bytes));
+        }
+    }
+    if !report.entries.is_empty() {
+        println!("\n  Details:");
+        for entry in &report.entries {
+            let root_marker = if entry.requires_root { " [root]" } else { "" };
+            println!(
+                "    {:<20} {:>10}  {}{}",
+                entry.category.to_string(),
+                bytesize::ByteSize(entry.size_bytes),
+                entry.description,
+                root_marker,
+            );
         }
     }
 }
