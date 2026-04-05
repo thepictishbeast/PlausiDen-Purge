@@ -5,6 +5,7 @@
 //! archives or securely deletes the rest, and backfills with synthetic data
 //! via plausiden-engine.
 
+mod algorithms;
 mod analyzer;
 mod archiver;
 mod config;
