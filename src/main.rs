@@ -14,6 +14,7 @@ mod dedup;
 mod destroyer;
 mod error;
 mod scanner;
+mod shredder;
 mod system_cleaner;
 mod tracker;
 
@@ -80,6 +81,23 @@ enum Commands {
         #[arg(long, default_value = "nist")]
         algorithm: String,
     },
+    /// Shred files or directories using the high-level secure deletion API
+    Shred {
+        /// File or directory to shred
+        path: String,
+        /// Erasure algorithm: auto, zerofill, nist, dod, gutmann, crypto
+        #[arg(long, default_value = "auto")]
+        algorithm: String,
+        /// Verify each pass after writing
+        #[arg(long)]
+        verify: bool,
+        /// Backfill freed space with synthetic data
+        #[arg(long)]
+        backfill: bool,
+        /// Show what would be deleted without doing anything
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// System-wide cleanup: package caches, logs, old kernels, temp files, and more
     SystemClean {
         /// Only show what would be cleaned (no deletions)
@@ -142,6 +160,64 @@ fn main() {
         Commands::Daemon => {
             tracing::info!("Starting Purge daemon");
             todo!("Daemon mode")
+        }
+        Commands::Shred { path, algorithm, verify, backfill, dry_run } => {
+            let target = std::path::Path::new(&path);
+
+            let mut s = shredder::Shredder::new().with_verify(verify).with_backfill(backfill);
+            if algorithm != "auto" {
+                let algo = match algorithm.as_str() {
+                    "zerofill" | "zero" => algorithms::ErasureAlgorithm::ZeroFill,
+                    "nist" => algorithms::ErasureAlgorithm::Nist80088,
+                    "dod" => algorithms::ErasureAlgorithm::Dod522022M,
+                    "gutmann" => algorithms::ErasureAlgorithm::Gutmann35,
+                    "crypto" => algorithms::ErasureAlgorithm::CryptographicErasure,
+                    other => {
+                        eprintln!("Unknown algorithm: {other}");
+                        std::process::exit(1);
+                    }
+                };
+                s = s.with_algorithm(algo);
+            }
+
+            if dry_run {
+                match s.dry_run(target) {
+                    Ok(preview) => {
+                        println!("DRY RUN — nothing will be deleted\n");
+                        println!("  Files:        {}", preview.files.len());
+                        println!("  Total bytes:  {}", bytesize::ByteSize(preview.total_bytes));
+                        println!("  Algorithm:    {}", preview.algorithm);
+                        println!("  Storage type: {}", preview.storage_type);
+                        println!("  Est. time:    {} ms", preview.estimated_ms);
+                    }
+                    Err(e) => eprintln!("Dry run failed: {e}"),
+                }
+            } else {
+                let pass_counter = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+                let counter = pass_counter.clone();
+                match s.shred_with_progress(target, move |p| {
+                    let prev = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    if prev == 0 || p.current_pass != prev {
+                        println!(
+                            "  [{:.1}%] pass {}/{} — {}",
+                            p.overall_percent(),
+                            p.current_pass,
+                            p.total_passes,
+                            p.current_file.display(),
+                        );
+                    }
+                }) {
+                    Ok(result) => {
+                        println!("\nShred complete:");
+                        println!("  Files deleted:  {}", result.files_deleted);
+                        println!("  Bytes freed:    {}", bytesize::ByteSize(result.bytes_freed));
+                        println!("  Algorithm:      {}", result.algorithm_used);
+                        println!("  Verified:       {}", result.verification_passed);
+                        println!("  Duration:       {} ms", result.duration_ms);
+                    }
+                    Err(e) => eprintln!("Shred failed: {e}"),
+                }
+            }
         }
         Commands::BrowserClean { dry_run, categories, algorithm } => {
             tracing::info!("Browser clean (dry_run={dry_run})");
