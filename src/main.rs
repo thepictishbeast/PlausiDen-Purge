@@ -10,6 +10,7 @@ mod analyzer;
 mod archiver;
 mod browser_cleaner;
 mod config;
+mod dedup;
 mod destroyer;
 mod error;
 mod scanner;
