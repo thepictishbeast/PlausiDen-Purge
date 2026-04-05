@@ -15,6 +15,7 @@ mod analyzer;
 mod archiver;
 mod browser_cleaner;
 mod config;
+mod daemon;
 mod dedup;
 mod privacy_audit;
 mod scanner;
@@ -169,8 +170,19 @@ fn main() {
         }
         Commands::Daemon => {
             tracing::info!("Starting Purge daemon");
-            println!("Daemon mode: scheduled cleanup every 24 hours");
-            println!("Press Ctrl+C to stop");
+            let d = daemon::PurgeDaemon::with_defaults();
+            let now = chrono::Utc::now();
+            println!("{}", d.render_status(now));
+            let overdue = d.overdue_actions(now);
+            if overdue.is_empty() {
+                println!("No tasks currently overdue.");
+            } else {
+                println!("Overdue tasks:");
+                for kind in &overdue {
+                    println!("  - {kind}");
+                }
+            }
+            println!("\nPress Ctrl+C to stop");
             loop { std::thread::sleep(std::time::Duration::from_secs(86400)); }
         }
         Commands::Shred { path, algorithm, verify, backfill, dry_run } => {
