@@ -4,7 +4,7 @@
 //! hashes only the size-colliding files (avoids hashing everything).
 //! Excludes symlinks, empty files, and files below a configurable minimum size.
 
-use crate::error::{PurgeError, Result};
+use plausiden_purge::error::{PurgeError, Result};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Read;

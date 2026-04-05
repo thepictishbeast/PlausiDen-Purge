@@ -1,0 +1,8 @@
+//! PlausiDen Purge — library crate.
+//!
+//! Re-exports core modules for integration tests and downstream consumers.
+
+pub mod algorithms;
+pub mod destroyer;
+pub mod error;
+pub mod shredder;

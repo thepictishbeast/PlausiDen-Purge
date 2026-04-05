@@ -13,9 +13,9 @@
 //! Brave, Vivaldi, Edge, and every Chromium derivative that follows the
 //! standard `Default/` profile layout.
 
-use crate::algorithms::ErasureAlgorithm;
-use crate::destroyer;
-use crate::error::Result;
+use plausiden_purge::algorithms::ErasureAlgorithm;
+use plausiden_purge::destroyer;
+use plausiden_purge::error::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;

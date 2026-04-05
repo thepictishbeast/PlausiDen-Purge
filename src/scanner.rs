@@ -3,7 +3,7 @@
 //! Walks directory trees checking access times (atime) to identify
 //! files that haven't been touched in a configurable number of days.
 
-use crate::error::{PurgeError, Result};
+use plausiden_purge::error::{PurgeError, Result};
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;

@@ -5,17 +5,19 @@
 //! archives or securely deletes the rest, and backfills with synthetic data
 //! via plausiden-engine.
 
-mod algorithms;
+// Core modules re-exported from the library crate.
+use plausiden_purge::algorithms;
+use plausiden_purge::destroyer;
+use plausiden_purge::shredder;
+
+// Binary-only modules.
 mod analyzer;
 mod archiver;
 mod browser_cleaner;
 mod config;
 mod dedup;
-mod destroyer;
-mod error;
 mod privacy_audit;
 mod scanner;
-mod shredder;
 mod system_cleaner;
 mod tracker;
 

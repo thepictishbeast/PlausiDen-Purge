@@ -9,9 +9,9 @@
 //! artifacts, Snap/Flatpak leftovers, core dumps, temp files, and recent
 //! document tracking files.
 
-use crate::algorithms::ErasureAlgorithm;
-use crate::destroyer;
-use crate::error::Result;
+use plausiden_purge::algorithms::ErasureAlgorithm;
+use plausiden_purge::destroyer;
+use plausiden_purge::error::Result;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
