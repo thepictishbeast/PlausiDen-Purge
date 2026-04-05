@@ -13,6 +13,7 @@ mod config;
 mod dedup;
 mod destroyer;
 mod error;
+mod privacy_audit;
 mod scanner;
 mod shredder;
 mod system_cleaner;
