@@ -11,4 +11,5 @@ pub mod metadata_strip;
 pub mod shredder;
 pub mod report;
 pub mod temp_monitor;
+pub mod privacy_audit;
 pub mod scheduler;
