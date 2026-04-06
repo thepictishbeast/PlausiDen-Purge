@@ -32,3 +32,4 @@ pub mod file_registry;
 pub mod wipe_patterns;
 pub mod log_archiver;
 pub mod content_dedup;
+pub mod age_index;
