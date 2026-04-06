@@ -7,6 +7,7 @@ pub mod destroyer;
 pub mod error;
 pub mod file_type;
 pub mod log_cleaner;
+pub mod metadata_extractor;
 pub mod metadata_strip;
 pub mod shredder;
 pub mod report;
