@@ -29,3 +29,4 @@ pub mod disk_watcher;
 pub mod backup_rotation;
 pub mod archive_catalog;
 pub mod file_registry;
+pub mod wipe_patterns;
