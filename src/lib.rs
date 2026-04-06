@@ -27,3 +27,4 @@ pub mod swap_cleaner;
 pub mod junk_detector;
 pub mod disk_watcher;
 pub mod backup_rotation;
+pub mod archive_catalog;
