@@ -18,6 +18,7 @@ pub mod restore;
 pub mod temp_monitor;
 pub mod privacy_audit;
 pub mod disk_analysis;
+pub mod duplicates;
 pub mod forensic_wipe;
 pub mod free_space_wipe;
 pub mod scheduler;
