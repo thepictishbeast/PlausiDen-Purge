@@ -25,3 +25,4 @@ pub mod scheduler;
 pub mod secure_random;
 pub mod swap_cleaner;
 pub mod junk_detector;
+pub mod disk_watcher;
