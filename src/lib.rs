@@ -30,3 +30,4 @@ pub mod backup_rotation;
 pub mod archive_catalog;
 pub mod file_registry;
 pub mod wipe_patterns;
+pub mod log_archiver;
