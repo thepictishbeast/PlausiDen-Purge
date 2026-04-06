@@ -9,3 +9,4 @@ pub mod file_type;
 pub mod metadata_strip;
 pub mod shredder;
 pub mod report;
+pub mod scheduler;
