@@ -634,6 +634,7 @@ dependencies = [
  "dirs",
  "libc",
  "rand",
+ "rand_chacha",
  "serde",
  "serde_json",
  "tempfile",
