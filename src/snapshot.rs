@@ -92,19 +92,19 @@ impl SnapshotManager {
             .map(|f| (&f.path, f))
             .collect();
 
-        let added: Vec<PathBuf> = new_paths.keys()
-            .filter(|p| !old_paths.contains_key(*p))
-            .map(|p| (*p).clone())
+        let added: Vec<PathBuf> = new_paths.iter()
+            .filter(|(p, _)| !old_paths.contains_key(*p))
+            .map(|(p, _)| (*p).clone())
             .collect();
 
-        let removed: Vec<PathBuf> = old_paths.keys()
-            .filter(|p| !new_paths.contains_key(*p))
-            .map(|p| (*p).clone())
+        let removed: Vec<PathBuf> = old_paths.iter()
+            .filter(|(p, _)| !new_paths.contains_key(*p))
+            .map(|(p, _)| (*p).clone())
             .collect();
 
         let modified: Vec<PathBuf> = new_paths.iter()
             .filter(|(p, new_f)| {
-                old_paths.get(p).map(|old_f| old_f.hash != new_f.hash).unwrap_or(false)
+                old_paths.get(*p).map(|old_f| old_f.hash != new_f.hash).unwrap_or(false)
             })
             .map(|(p, _)| (*p).clone())
             .collect();
