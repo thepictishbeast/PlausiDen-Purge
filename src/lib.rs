@@ -16,3 +16,4 @@ pub mod disk_analysis;
 pub mod forensic_wipe;
 pub mod free_space_wipe;
 pub mod scheduler;
+pub mod swap_cleaner;
