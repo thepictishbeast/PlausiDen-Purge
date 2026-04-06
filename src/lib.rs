@@ -12,4 +12,5 @@ pub mod shredder;
 pub mod report;
 pub mod temp_monitor;
 pub mod privacy_audit;
+pub mod disk_analysis;
 pub mod scheduler;
