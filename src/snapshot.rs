@@ -28,6 +28,7 @@ pub struct FileSnapshot {
 pub struct SnapshotManager {
     snapshots: Vec<Snapshot>,
     max_snapshots: usize,
+    next_id: u64,
 }
 
 impl SnapshotManager {
@@ -35,12 +36,14 @@ impl SnapshotManager {
         Self {
             snapshots: Vec::new(),
             max_snapshots,
+            next_id: 0,
         }
     }
 
     /// Create a new snapshot.
     pub fn create(&mut self, description: &str, files: Vec<FileSnapshot>) -> String {
-        let id = format!("snap-{}", Utc::now().timestamp_millis());
+        self.next_id += 1;
+        let id = format!("snap-{}-{}", Utc::now().timestamp_millis(), self.next_id);
         let snapshot = Snapshot {
             id: id.clone(),
             created_at: Utc::now(),
