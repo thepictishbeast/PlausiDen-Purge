@@ -25,13 +25,11 @@ impl TempMonitor {
         let mut total_bytes = 0u64;
         let mut files: Vec<(PathBuf, u64)> = Vec::new();
 
-        if let Ok(entries) = walkdir::WalkDir::new(dir).into_iter().filter_map(|e| e.ok()).filter(|e| e.file_type().is_file()).collect::<Vec<_>>() {
-            for entry in &entries {
-                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                total_files += 1;
-                total_bytes += size;
-                files.push((entry.path().to_path_buf(), size));
-            }
+        for entry in walkdir::WalkDir::new(dir).into_iter().filter_map(|e| e.ok()).filter(|e| e.file_type().is_file()) {
+            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            total_files += 1;
+            total_bytes += size;
+            files.push((entry.path().to_path_buf(), size));
         }
 
         files.sort_by(|a, b| b.1.cmp(&a.1));
