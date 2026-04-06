@@ -11,6 +11,7 @@ pub mod log_cleaner;
 pub mod metadata_extractor;
 pub mod metadata_strip;
 pub mod shredder;
+pub mod snapshot;
 pub mod report;
 pub mod temp_monitor;
 pub mod privacy_audit;
