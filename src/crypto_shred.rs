@@ -31,12 +31,15 @@
 //! whole-drive ATA Secure Erase.
 
 use crate::error::{PurgeError, Result};
+use crate::progress::PurgeProgress;
 use chacha20poly1305::aead::{AeadInPlace, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use rand::RngCore;
 use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use zeroize::Zeroize;
 
 /// Options for a crypto-shred operation.
@@ -88,6 +91,26 @@ pub struct CryptoShredReport {
 /// for verifying that the user explicitly approved this specific
 /// path before invoking.
 pub fn crypto_shred(path: &Path, options: &CryptoShredOptions) -> Result<CryptoShredReport> {
+    crypto_shred_with_progress(path, options, None)
+}
+
+/// Crypto-shred with an optional shared progress handle.
+///
+/// The progress handle's counters are updated as bytes are written
+/// and the cancel flag is polled between passes so the caller can
+/// abort an in-flight shred. On cancel, any already-written bytes
+/// remain and the file is left in whatever state it was in when the
+/// cancel landed — no attempt is made to restore the original
+/// plaintext (which is the whole point of shredding).
+///
+/// BUG ASSUMPTION: cancellation may arrive between passes or mid-
+/// pass; the filesystem may run out of space mid-write; the ephemeral
+/// key must still be zeroized on every exit path.
+pub fn crypto_shred_with_progress(
+    path: &Path,
+    options: &CryptoShredOptions,
+    progress: Option<Arc<PurgeProgress>>,
+) -> Result<CryptoShredReport> {
     if !path.exists() {
         return Err(PurgeError::Io(format!("path does not exist: {}", path.display())));
     }
@@ -109,6 +132,16 @@ pub fn crypto_shred(path: &Path, options: &CryptoShredOptions) -> Result<CryptoS
         .map_err(|e| PurgeError::Io(format!("{}: {}", path.display(), e)))?
         .len();
 
+    // Seed the progress handle with what we're about to do.
+    if let Some(p) = &progress {
+        let total_passes = if options.pre_random_pass { 2 } else { 1 };
+        p.total_bytes
+            .store(original_size * total_passes, Ordering::Relaxed);
+        p.total_passes
+            .store(total_passes, Ordering::Relaxed);
+        p.set_path(path.to_path_buf());
+    }
+
     let mut bytes_written: u64 = 0;
     let mut chunks_processed: u64 = 0;
 
@@ -117,10 +150,21 @@ pub fn crypto_shred(path: &Path, options: &CryptoShredOptions) -> Result<CryptoS
     // each other (they will differ because the key is random, but a
     // defensive mindset still benefits from a separate random pass).
     if options.pre_random_pass && original_size > 0 {
+        if let Some(p) = &progress {
+            p.set_step("pre-pass: random overwrite");
+        }
         let mut rng = rand::thread_rng();
         let mut buf = vec![0u8; options.chunk_size];
         let mut offset: u64 = 0;
         while offset < original_size {
+            if let Some(p) = &progress
+                && p.is_cancelled()
+            {
+                buf.zeroize();
+                return Err(PurgeError::Io(
+                    "crypto_shred cancelled during pre-pass".into(),
+                ));
+            }
             let to_write = options.chunk_size.min((original_size - offset) as usize);
             rng.fill_bytes(&mut buf[..to_write]);
             file.seek(SeekFrom::Start(offset))
@@ -129,10 +173,17 @@ pub fn crypto_shred(path: &Path, options: &CryptoShredOptions) -> Result<CryptoS
                 .map_err(|e| PurgeError::Io(format!("{}: {}", path.display(), e)))?;
             bytes_written += to_write as u64;
             offset += to_write as u64;
+            if let Some(p) = &progress {
+                p.bytes_written
+                    .fetch_add(to_write as u64, Ordering::Relaxed);
+            }
         }
         file.sync_data()
             .map_err(|e| PurgeError::Io(format!("{}: {}", path.display(), e)))?;
         buf.zeroize();
+        if let Some(p) = &progress {
+            p.passes_completed.fetch_add(1, Ordering::Relaxed);
+        }
     }
 
     // Generate an ephemeral 256-bit key and 96-bit nonce.
@@ -144,10 +195,24 @@ pub fn crypto_shred(path: &Path, options: &CryptoShredOptions) -> Result<CryptoS
     let cipher = ChaCha20Poly1305::new(Key::from_slice(&key_bytes));
     let nonce = Nonce::from_slice(&nonce_bytes);
 
+    if let Some(p) = &progress {
+        p.set_step("main pass: chacha20 encryption");
+    }
+
     let mut buffer = vec![0u8; options.chunk_size];
     let mut offset: u64 = 0;
 
     while offset < original_size {
+        if let Some(p) = &progress
+            && p.is_cancelled()
+        {
+            key_bytes.zeroize();
+            nonce_bytes.zeroize();
+            buffer.zeroize();
+            return Err(PurgeError::Io(
+                "crypto_shred cancelled during main pass".into(),
+            ));
+        }
         let to_read = options.chunk_size.min((original_size - offset) as usize);
         file.seek(SeekFrom::Start(offset))
             .map_err(|e| PurgeError::Io(format!("{}: {}", path.display(), e)))?;
@@ -175,6 +240,13 @@ pub fn crypto_shred(path: &Path, options: &CryptoShredOptions) -> Result<CryptoS
         offset += n as u64;
         bytes_written += n as u64;
         chunks_processed += 1;
+        if let Some(p) = &progress {
+            p.bytes_written
+                .fetch_add(n as u64, Ordering::Relaxed);
+        }
+    }
+    if let Some(p) = &progress {
+        p.passes_completed.fetch_add(1, Ordering::Relaxed);
     }
 
     let fsynced = file
@@ -346,5 +418,66 @@ mod tests {
         assert_eq!(report.original_size, 0);
         assert_eq!(report.chunks_processed, 0);
         assert!(report.removed);
+    }
+
+    #[test]
+    fn test_crypto_shred_updates_progress() {
+        let path = make_temp_file(&vec![0x55u8; 4096]);
+        let options = CryptoShredOptions {
+            unlink_after: false,
+            truncate_after: false,
+            chunk_size: 1024,
+            ..Default::default()
+        };
+        let progress = PurgeProgress::new();
+        let report = crypto_shred_with_progress(&path, &options, Some(progress.clone())).unwrap();
+        assert_eq!(report.bytes_written, 4096);
+        assert_eq!(
+            progress.bytes_written.load(Ordering::Relaxed),
+            4096
+        );
+        assert_eq!(
+            progress.passes_completed.load(Ordering::Relaxed),
+            1
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_crypto_shred_cancellation_stops_main_pass() {
+        let path = make_temp_file(&vec![0u8; 64 * 1024]);
+        let options = CryptoShredOptions {
+            unlink_after: false,
+            truncate_after: false,
+            chunk_size: 1024,
+            ..Default::default()
+        };
+        let progress = PurgeProgress::new();
+        progress.request_cancel();
+        let result = crypto_shred_with_progress(&path, &options, Some(progress.clone()));
+        assert!(result.is_err());
+        assert!(
+            matches!(&result, Err(PurgeError::Io(msg)) if msg.contains("cancelled"))
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_crypto_shred_progress_snapshot_reflects_work() {
+        let path = make_temp_file(&vec![0u8; 8192]);
+        let options = CryptoShredOptions {
+            unlink_after: false,
+            truncate_after: false,
+            pre_random_pass: true,
+            ..Default::default()
+        };
+        let progress = PurgeProgress::new();
+        crypto_shred_with_progress(&path, &options, Some(progress.clone())).unwrap();
+        let snap = progress.snapshot();
+        assert_eq!(snap.total_passes, 2);
+        assert_eq!(snap.passes_completed, 2);
+        // With pre-pass the total_bytes counter should be size * 2.
+        assert_eq!(snap.total_bytes, 8192 * 2);
+        std::fs::remove_file(&path).ok();
     }
 }
