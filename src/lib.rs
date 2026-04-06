@@ -24,3 +24,4 @@ pub mod free_space_wipe;
 pub mod scheduler;
 pub mod secure_random;
 pub mod swap_cleaner;
+pub mod junk_detector;
