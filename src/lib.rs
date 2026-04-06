@@ -7,6 +7,7 @@ pub mod cron_manager;
 pub mod crypto_shred;
 pub mod destroyer;
 pub mod progress;
+pub mod safety;
 pub mod error;
 pub mod file_age;
 pub mod file_carving_blocker;

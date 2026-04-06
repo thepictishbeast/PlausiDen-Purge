@@ -23,10 +23,9 @@
 //! This module has been rewritten to close all four.
 
 use crate::error::{PurgeError, Result};
-use std::fs::{self, File, OpenOptions};
+use crate::safety::safe_open_rw;
+use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
-use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use zeroize::Zeroize;
 
@@ -169,57 +168,6 @@ enum OverwritePattern {
     Zeros,
     Ones,
     Random,
-}
-
-/// Open a regular file for read+write with O_NOFOLLOW, fstat-verify
-/// it is still a regular file, and take an exclusive non-blocking
-/// flock. Returns the locked file handle; drop releases the lock.
-fn safe_open_rw(path: &Path) -> Result<File> {
-    let open_result = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(path);
-    let file = match open_result {
-        Ok(f) => f,
-        Err(e) => {
-            if e.raw_os_error() == Some(libc::ELOOP) {
-                return Err(PurgeError::Io(format!(
-                    "path became a symlink between check and open (TOCTOU): {}",
-                    path.display()
-                )));
-            }
-            return Err(PurgeError::Io(format!("open failed: {}", e)));
-        }
-    };
-
-    // fstat verify
-    let fd = file.as_raw_fd();
-    let mut stat_buf: libc::stat = unsafe { std::mem::zeroed() };
-    // SAFETY: fstat with a valid fd and a zeroed stat buffer.
-    let rc = unsafe { libc::fstat(fd, &mut stat_buf) };
-    if rc != 0 {
-        return Err(PurgeError::Io("fstat failed after open".into()));
-    }
-    if (stat_buf.st_mode & libc::S_IFMT) != libc::S_IFREG {
-        return Err(PurgeError::Io(
-            "fstat reports non-regular file after open".into(),
-        ));
-    }
-
-    // Exclusive non-blocking flock.
-    // SAFETY: flock with a valid fd.
-    let flock_rc = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
-    if flock_rc != 0 {
-        let err = std::io::Error::last_os_error();
-        return Err(PurgeError::Io(format!(
-            "another process holds a lock on {} (flock: {})",
-            path.display(),
-            err
-        )));
-    }
-
-    Ok(file)
 }
 
 fn overwrite_file(path: &Path, size: u64, pattern: &OverwritePattern) -> Result<()> {
@@ -409,14 +357,4 @@ mod tests {
         verify_overwrite(&path, 1 << 20, &OverwritePattern::Zeros).unwrap();
     }
 
-    #[test]
-    fn test_safe_open_rw_rejects_symlink() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let target = dir.path().join("target.txt");
-        fs::write(&target, b"x").unwrap();
-        let link = dir.path().join("link.txt");
-        std::os::unix::fs::symlink(&target, &link).unwrap();
-        let result = safe_open_rw(&link);
-        assert!(result.is_err());
-    }
 }

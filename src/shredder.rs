@@ -6,6 +6,7 @@
 
 use crate::algorithms::{self, ErasureAlgorithm, PassPattern};
 use crate::error::{PurgeError, Result};
+use crate::safety::{safe_open_rw, safe_symlink_metadata};
 
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
@@ -369,17 +370,20 @@ impl Shredder {
         F: Fn(&ShredProgress),
     {
         let start = Instant::now();
-        let meta = fs::metadata(path).map_err(|e| PurgeError::Io(e.to_string()))?;
+        // SECURITY: reject symlinks/devices/fifos/sockets up front
+        // via the shared safe_symlink_metadata helper. The earlier
+        // version used fs::metadata which follows symlinks and had
+        // no file-type check.
+        let meta = safe_symlink_metadata(path)?;
         let file_size = meta.len();
 
         let patterns = algo.patterns();
         let total_passes = patterns.len() as u32;
 
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(path)
-            .map_err(|e| PurgeError::Io(e.to_string()))?;
+        // SECURITY: open with O_NOFOLLOW + fstat + exclusive flock
+        // via the shared safe_open_rw helper so the TOCTOU window
+        // between check and open cannot be exploited.
+        let mut file = safe_open_rw(path)?;
 
         let mut verified = true;
 
@@ -420,10 +424,10 @@ impl Shredder {
         drop(file);
 
         // Truncate, random-rename, unlink (same as destroyer.rs).
-        let trunc = OpenOptions::new()
-            .write(true)
-            .open(path)
-            .map_err(|e| PurgeError::Io(e.to_string()))?;
+        // Truncation reuses safe_open_rw for the same AVP-2 safety
+        // gates; any race between the final pass's drop and this
+        // reopen is caught by O_NOFOLLOW + fstat.
+        let trunc = safe_open_rw(path)?;
         trunc.set_len(0).map_err(|e| PurgeError::Io(e.to_string()))?;
         drop(trunc);
 
