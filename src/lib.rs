@@ -6,6 +6,7 @@ pub mod algorithms;
 pub mod cron_manager;
 pub mod destroyer;
 pub mod error;
+pub mod file_age;
 pub mod file_type;
 pub mod log_cleaner;
 pub mod metadata_extractor;
