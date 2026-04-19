@@ -16,3 +16,8 @@ Storage sovereignty engine. App usage tracking, archival, secure data destructio
 - plausiden-shard: Fragment encrypted archives
 
 ## CLI subcommands: scan, report, archive, destroy, usage, daemon
+
+## Narrative Framing
+Civil rights tool restoring the presumption of innocence. Use: "plausible deniability," "presumption of innocence," "forensic reliability," "data sovereignty," "surveillance resistance," "digital civil rights." Avoid: "hacking," "evasion," "anti-forensics," "hide," "trick," "fool."
+
+NEVER include personal political beliefs or ideology of any contributor in any file.
