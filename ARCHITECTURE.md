@@ -157,3 +157,59 @@ Planned integration with low-level storage APIs:
 | Windows | Planned | NTFS, cipher /w, SDelete integration |
 | Android | Planned | Scoped storage, no direct disk access without root |
 | iOS | Planned | Extremely limited — sandbox restrictions |
+
+---
+
+## Out of Scope
+
+Per v1.2 §G.3. Purge is a **destructive overwrite / cryptographic-
+erasure utility**. It deletes data the user asks it to delete and
+records a proof of the operation. It does NOT:
+
+- **Guarantee recovery-impossibility on wear-levelled flash storage
+  without hardware support.** Modern SSDs and eMMC controllers
+  remap writes behind a Flash Translation Layer; overwriting an
+  LBA does not overwrite the underlying NAND cell. Purge's
+  NIST 800-88 / DoD 5220 patterns fall back to ATA Secure Erase
+  or NVMe Format where available, but on a consumer device
+  without those commands exposed, only the crypto-erase mode
+  provides a strong guarantee. The README and LEGAL.md must
+  make this caveat prominent to the end user.
+- **Verify that upstream data stores have not re-synced.** If
+  cloud sync (iCloud Drive, OneDrive, Google Drive) or a backup
+  agent (Time Machine, File History, Arq) uploaded a copy
+  before Purge ran, erasing the local copy does not erase the
+  remote. Purge's scope ends at the local filesystem; users
+  must pause / purge cloud backups separately.
+- **Detect or prevent filesystem-level journaling remnants.**
+  ext4 journal, NTFS `$LogFile`, APFS snapshots, and btrfs
+  subvolume snapshots may retain overwritten blocks. Purge
+  shells out to filesystem-specific commands (`e4defrag`,
+  `vssadmin delete shadows`, etc.) where available but cannot
+  guarantee every journal copy is reachable.
+- **Bypass enterprise MDM / EDR / DLP agents.** Corporate
+  endpoint-management tools may forward copies of files
+  BEFORE Purge runs. Attempting to evade these is explicitly
+  out of scope — Purge surfaces the presence of such an agent
+  in its pre-flight report and lets the user decide whether
+  to proceed.
+- **Provide legal advice on spoliation risk.** Purge is a tool;
+  firing it during an active litigation hold, criminal
+  investigation, or regulatory inquiry can constitute
+  obstruction-of-justice in several jurisdictions. See
+  LEGAL.md (when written for this repo) and the Engine
+  LEGAL.md §2 analysis of cryptographic-erasure legal posture.
+- **Sanitize RAM, swap, hibernation files, or unreferenced
+  kernel buffers.** Those are `plausiden-engine::erasure`'s
+  domain (mlocked pages, zeroize-on-drop) plus an OS / boot-
+  time responsibility; Purge operates on on-disk storage only.
+- **Run as a cron / daemon by default.** Purge is invoked by
+  the user or by a higher-tier orchestrator (Desktop's
+  kill-switch, a deadman fire). The `daemon` CLI subcommand
+  exists for tracking (atime scans) but never for scheduled
+  automatic destruction — that belongs in
+  `engine-core::deadman` with a host driving the timer.
+
+Every "cannot" above is more important than any "can" — a user
+who thinks Purge scrubbed everything when it actually couldn't
+is worse off than one who knows the tool's limits.
