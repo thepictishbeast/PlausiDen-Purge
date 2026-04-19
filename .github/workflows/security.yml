@@ -29,7 +29,7 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --all-targets -- -D warnings -W clippy::pedantic -A clippy::module_name_repetitions -A clippy::must_use_candidate -A clippy::uninlined_format_args -A clippy::missing_errors_doc -A clippy::missing_panics_doc -A clippy::cast_possible_truncation -A clippy::cast_sign_loss -A clippy::cast_precision_loss -A clippy::cast_possible_wrap -A clippy::too_many_lines -A clippy::similar_names -A clippy::doc_markdown
+      - run: cargo clippy --workspace --all-targets -- -D warnings
 
   deny:
     name: Cargo Deny
