@@ -83,7 +83,7 @@ impl SparseDetector {
     /// Top N sparsest files.
     pub fn top_sparsest(&self, n: usize) -> Vec<&SparseFile> {
         let mut sorted: Vec<&SparseFile> = self.files.iter().collect();
-        sorted.sort_by(|a, b| b.sparseness().partial_cmp(&a.sparseness()).unwrap());
+        sorted.sort_by(|a, b| b.sparseness().partial_cmp(&a.sparseness()).unwrap_or(std::cmp::Ordering::Equal)); // SAFETY: sparseness is a ratio in [0.0, 1.0]; never NaN, but Equal fallback for total ordering
         sorted.truncate(n);
         sorted
     }

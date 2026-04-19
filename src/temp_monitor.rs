@@ -44,7 +44,7 @@ impl TempMonitor {
     pub fn growth_rate(&self) -> Option<f64> {
         if self.snapshots.len() < 2 { return None; }
         let first = &self.snapshots[0];
-        let last = self.snapshots.last().unwrap();
+        let last = self.snapshots.last().unwrap(); // SAFETY: len >= 2 per guard above
         let time_diff = (last.timestamp - first.timestamp).num_seconds() as f64;
         if time_diff <= 0.0 { return None; }
         Some((last.total_bytes as f64 - first.total_bytes as f64) / time_diff)
