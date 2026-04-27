@@ -7,23 +7,18 @@ on:
   schedule:
     - cron: '0 6 * * 1'  # Weekly Monday 6am UTC
 
+# Two passes intended (supersociety: no single tool). Today we run
+# cargo-deny only — the cargo-audit pass is parked because:
+#   * Kali runner's OS package is 0.21.2 → can't parse CVSS:4.0
+#   * `cargo install --locked cargo-audit` flakes on rustup rust-src
+#     download corruption (see AVP-PASS 2026-04-27)
+#   * $CARGO_HOME/bin/cargo-audit isn't visible inside the
+#     rust-toolchain action's effective CARGO_HOME at job time
+# Re-enable when the runner image ships ≥0.22.x in /usr/bin OR a
+# pinned binary install via curl-tarball lands. cargo-deny check
+# advisories covers the same RUSTSEC database in the meantime.
+
 jobs:
-  audit:
-    name: Dependency Audit
-    runs-on: [self-hosted, linux, x64, plausiden]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Run cargo audit (deny warnings)
-        # Use the cargo-installed cargo-audit (≥0.22.x supports CVSS:4.0
-        # vectors that newer RUSTSEC advisories use) — the OS-packaged
-        # one in /usr/bin is 0.21.2 and bails with "unsupported CVSS
-        # version". $CARGO_HOME is set by the rust-toolchain action.
-        # AVP-PASS: 2026-04-27.
-        run: $CARGO_HOME/bin/cargo-audit audit
-
-
   deny:
     name: Cargo Deny
     runs-on: [self-hosted, linux, x64, plausiden]
