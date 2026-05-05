@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license = "BSL-1.1"
 description = "Storage sovereignty engine — intelligent app tracking, archival, and secure data destruction"
-repository = "https://github.com/redcaptian1917/PlausiDen-Purge"
+repository = "https://github.com/thepictishbeast/PlausiDen-Purge"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
